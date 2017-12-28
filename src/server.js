@@ -17,6 +17,7 @@ import jwt from 'jsonwebtoken';
 import fetch from 'node-fetch';
 import React from 'react';
 import ReactDOM from 'react-dom/server';
+import * as EmotionServer from 'emotion-server';
 import PrettyError from 'pretty-error';
 import App from './components/App';
 import Html from './components/Html';
@@ -141,11 +142,16 @@ app.get('*', async (req, res, next) => {
       return;
     }
 
-    const data = { ...route };
-    data.children = ReactDOM.renderToString(
-      <App context={context}>{route.component}</App>,
+    const emotionResult = EmotionServer.extractCritical(
+      ReactDOM.renderToString(<App context={context}>{route.component}</App>),
     );
-    data.styles = [{ id: 'css', cssText: [...css].join('') }];
+
+    const data = { ...route };
+    data.children = emotionResult.html;
+    data.styles = [
+      { id: 'css', cssText: [...css].join('') }, // Isomorphic styles
+      { id: 'emotion', cssText: emotionResult.css }, // Emotion styles.
+    ];
     data.scripts = [assets.vendor.js];
     if (route.chunks) {
       data.scripts.push(...route.chunks.map(chunk => assets[chunk].js));
@@ -153,6 +159,7 @@ app.get('*', async (req, res, next) => {
     data.scripts.push(assets.client.js);
     data.app = {
       apiUrl: config.api.clientUrl,
+      emotionIds: emotionResult.ids,
     };
 
     const html = ReactDOM.renderToStaticMarkup(<Html {...data} />);
@@ -161,6 +168,9 @@ app.get('*', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+  // finally {
+  //   EmotionServer.flush();
+  // }
 });
 
 //
